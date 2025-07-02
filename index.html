@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang='en'>
 <head>
   <meta charset='UTF-8'>
@@ -8,12 +7,13 @@
     :root { --bg: #f0f2f5; --card-bg: #ffffff; --primary: #4a90e2; --text: #333333; --input-bg: #f9fafb; --input-border: #cccccc; }
     * { box-sizing: border-box; }
     body { background: var(--bg); font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 2rem; color: var(--text); }
-    .container { max-width: 800px; margin: auto; }
+    .container { max-width: 1000px; margin: auto; }
     .add-btn { margin-bottom: 1rem; padding: 0.6rem 1rem; border: none; border-radius: 4px; background: var(--primary); color: #fff; cursor: pointer; }
-    .counter { background: var(--card-bg); padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 1rem; }
+    #counters { position: relative; height: 600px; border: 1px dashed #ccc; padding: 1rem; }
+    .counter { position: absolute; background: var(--card-bg); padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: move; }
     .odometer { font-size: 3rem; font-weight: bold; text-align: center; margin-bottom: 1rem; font-variant-numeric: tabular-nums; transition: transform 0.3s ease; }
     .odometer.animate { transform: scale(1.2); }
-    .controls { display: grid; grid-template-columns: repeat(auto-fill,minmax(120px,1fr)); gap: 0.5rem; margin-bottom: 1rem; }
+    .controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px,1fr)); gap: 0.5rem; margin-bottom: 1rem; }
     .controls label { display: flex; flex-direction: column; font-size: 0.9rem; }
     .controls input[type='number'], .controls input[type='color'] { padding: 0.5rem; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg); font-size: 1rem; }
     .buttons { display: flex; gap: 0.5rem; justify-content: center; }
@@ -27,6 +27,7 @@
     <button id='addCounterBtn' class='add-btn'>Add Counter</button>
     <div id='counters'></div>
   </div>
+
   <template id='counterTemplate'>
     <div class='counter'>
       <div class='odometer'>0</div>
@@ -44,27 +45,50 @@
       </div>
     </div>
   </template>
+
   <script>
     const countersContainer = document.getElementById('counters');
     const addBtn = document.getElementById('addCounterBtn');
     let counterId = 0;
+    let dragEl = null, offsetX = 0, offsetY = 0;
+
+    // Global drag handlers
+    document.addEventListener('mousemove', e => {
+      if (dragEl) {
+        dragEl.style.left = (e.clientX - offsetX) + 'px';
+        dragEl.style.top = (e.clientY - offsetY) + 'px';
+      }
+    });
+    document.addEventListener('mouseup', () => {
+      if (dragEl) {
+        dragEl.style.cursor = 'move';
+        dragEl = null;
+      }
+    });
+
     function createCounter() {
       const template = document.getElementById('counterTemplate');
       const clone = template.content.cloneNode(true);
+      const node = clone.querySelector('.counter');
       const id = counterId++;
-      const counterEl = clone.querySelector('.counter');
-      counterEl.dataset.id = id;
-      const odo = clone.querySelector('.odometer');
-      const initInput = clone.querySelector('.initCount');
-      const minGainInput = clone.querySelector('.minGain');
-      const maxGainInput = clone.querySelector('.maxGain');
-      const intervalInput = clone.querySelector('.interval');
-      const colorPicker = clone.querySelector('.colorPicker');
-      const startBtn = clone.querySelector('.startBtn');
-      const stopBtn = clone.querySelector('.stopBtn');
-      const setBtn = clone.querySelector('.setBtn');
+      node.dataset.id = id;
+      // Initial position
+      node.style.top = (20 + id * 120) + 'px';
+      node.style.left = '20px';
+
+      const odo = node.querySelector('.odometer');
+      const initInput = node.querySelector('.initCount');
+      const minGainInput = node.querySelector('.minGain');
+      const maxGainInput = node.querySelector('.maxGain');
+      const intervalInput = node.querySelector('.interval');
+      const colorPicker = node.querySelector('.colorPicker');
+      const startBtn = node.querySelector('.startBtn');
+      const stopBtn = node.querySelector('.stopBtn');
+      const setBtn = node.querySelector('.setBtn');
+
       let count = parseInt(initInput.value, 10) || 0;
       let timer = null;
+
       function updateDisplay() {
         odo.textContent = count;
         odo.style.color = colorPicker.value;
@@ -90,13 +114,24 @@
         count = parseInt(initInput.value, 10) || 0;
         updateDisplay();
       }
+
+      // Drag behavior
+      node.addEventListener('mousedown', e => {
+        dragEl = node;
+        offsetX = e.clientX - node.offsetLeft;
+        offsetY = e.clientY - node.offsetTop;
+        node.style.cursor = 'grabbing';
+      });
+
       startBtn.addEventListener('click', startOdo);
       stopBtn.addEventListener('click', stopOdo);
       setBtn.addEventListener('click', setCount);
       colorPicker.addEventListener('input', () => odo.style.color = colorPicker.value);
+
       updateDisplay();
       countersContainer.appendChild(clone);
     }
+
     addBtn.addEventListener('click', createCounter);
     createCounter();
   </script>
