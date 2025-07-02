@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang='en'>
 <head>
   <meta charset='UTF-8'>
@@ -9,18 +10,20 @@
     body { background: var(--bg); font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 2rem; color: var(--text); }
     .container { max-width: 1000px; margin: auto; }
     .add-btn { margin-bottom: 1rem; padding: 0.6rem 1rem; border: none; border-radius: 4px; background: var(--primary); color: #fff; cursor: pointer; }
-    #counters { position: relative; height: 600px; border: 1px dashed #ccc; padding: 1rem; }
-    .counter { position: absolute; background: var(--card-bg); padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: move; }
-    .odometer { font-size: 3rem; font-weight: bold; text-align: center; margin-bottom: 1rem; font-variant-numeric: tabular-nums; transition: transform 0.3s ease; }
-    .odometer.animate { transform: scale(1.2); }
+    #counters { position: relative; min-height: 600px; border: 1px dashed #ccc; padding: 1rem; }
+    .counter { position: absolute; background: var(--card-bg); padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: move; width: 300px; }
+    .counterImg { max-width: 100%; height: auto; margin-bottom: 0.5rem; border-radius: 4px; }
+    .odometer { font-size: 2.5rem; font-weight: bold; text-align: center; margin-bottom: 1rem; font-variant-numeric: tabular-nums; }
     .controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px,1fr)); gap: 0.5rem; margin-bottom: 1rem; }
     .controls label { display: flex; flex-direction: column; font-size: 0.9rem; }
     .controls input[type='number'], .controls input[type='color'] { padding: 0.5rem; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg); font-size: 1rem; }
-    .buttons { display: flex; gap: 0.5rem; justify-content: center; }
+    .controls input[type='file'] { margin-top: 0.5rem; }
+    .buttons { display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1rem; }
     .buttons button { padding: 0.6rem 1rem; border: none; border-radius: 4px; background: var(--primary); color: #fff; cursor: pointer; transition: background 0.2s; }
     .buttons button:disabled { opacity: 0.6; cursor: default; }
     .buttons button:not(:disabled):hover { background: #357ABD; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class='container'>
@@ -30,7 +33,10 @@
 
   <template id='counterTemplate'>
     <div class='counter'>
+      <img class='counterImg' src='' alt='Counter Image' />
+      <input type='file' class='imgInput' accept='image/*' />
       <div class='odometer'>0</div>
+      <canvas class='chart' width='280' height='140'></canvas>
       <div class='controls'>
         <label>Initial Count<input type='number' class='initCount' value='0'></label>
         <label>Min Gain<input type='number' class='minGain' value='1'></label>
@@ -52,29 +58,31 @@
     let counterId = 0;
     let dragEl = null, offsetX = 0, offsetY = 0;
 
-    // Global drag handlers
     document.addEventListener('mousemove', e => {
       if (dragEl) {
         dragEl.style.left = (e.clientX - offsetX) + 'px';
         dragEl.style.top = (e.clientY - offsetY) + 'px';
       }
     });
-    document.addEventListener('mouseup', () => {
-      if (dragEl) {
-        dragEl.style.cursor = 'move';
-        dragEl = null;
-      }
-    });
+    document.addEventListener('mouseup', () => { if (dragEl) { dragEl.style.cursor = 'move'; dragEl = null; }});
 
     function createCounter() {
-      const template = document.getElementById('counterTemplate');
-      const clone = template.content.cloneNode(true);
+      const clone = document.getElementById('counterTemplate').content.cloneNode(true);
       const node = clone.querySelector('.counter');
       const id = counterId++;
       node.dataset.id = id;
-      // Initial position
-      node.style.top = (20 + id * 120) + 'px';
+      node.style.top = (20 + id * 140) + 'px';
       node.style.left = '20px';
+
+      const imgInput = node.querySelector('.imgInput');
+      const counterImg = node.querySelector('.counterImg');
+      imgInput.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => counterImg.src = reader.result;
+        reader.readAsDataURL(file);
+      });
 
       const odo = node.querySelector('.odometer');
       const initInput = node.querySelector('.initCount');
@@ -85,51 +93,63 @@
       const startBtn = node.querySelector('.startBtn');
       const stopBtn = node.querySelector('.stopBtn');
       const setBtn = node.querySelector('.setBtn');
+      const ctx = node.querySelector('.chart').getContext('2d');
 
-      let count = parseInt(initInput.value, 10) || 0;
+      let count = +initInput.value;
       let timer = null;
+      let prevCount = count;
+      let chart = new Chart(ctx, {
+        type: 'line', data: { labels: [], datasets: [{ label: 'Count', data: [], fill: false, tension: 0.4 }] },
+        options: { animation: false, scales:{ x:{ display:false } }, plugins:{ legend:{ display:false } } }
+      });
+
+      function animateValue(start, end, duration=500) {
+        const range = end - start;
+        let startTime = null;
+        function step(timestamp) {
+          if (!startTime) startTime = timestamp;
+          const progress = Math.min((timestamp - startTime)/duration, 1);
+          const value = Math.floor(start + (range * progress));
+          odo.textContent = value.toLocaleString();
+          if (progress < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+      }
 
       function updateDisplay() {
-        odo.textContent = count;
+        prevCount = +odo.textContent.replace(/,/g, '') || 0;
+        animateValue(prevCount, count);
         odo.style.color = colorPicker.value;
-        odo.classList.add('animate');
-        setTimeout(() => odo.classList.remove('animate'), 300);
+        chart.data.labels.push('');
+        chart.data.datasets[0].data.push(count);
+        if (chart.data.labels.length > 20) {
+          chart.data.labels.shift(); chart.data.datasets[0].data.shift();
+        }
+        chart.update();
       }
+
       function startOdo() {
         if (timer) return;
         timer = setInterval(() => {
-          const min = parseInt(minGainInput.value, 10) || 0;
-          const max = parseInt(maxGainInput.value, 10) || 0;
-          const gain = Math.floor(Math.random() * (max - min + 1)) + min;
-          count += gain;
+          const min = +minGainInput.value;
+          const max = +maxGainInput.value;
+          prevCount = count;
+          count += Math.floor(Math.random()*(max-min+1)) + min;
           updateDisplay();
-        }, parseInt(intervalInput.value, 10) || 1000);
+        }, +intervalInput.value);
         startBtn.disabled = true; stopBtn.disabled = false;
       }
-      function stopOdo() {
-        clearInterval(timer); timer = null;
-        startBtn.disabled = false; stopBtn.disabled = true;
-      }
-      function setCount() {
-        count = parseInt(initInput.value, 10) || 0;
-        updateDisplay();
-      }
+      function stopOdo() { clearInterval(timer); timer=null; startBtn.disabled=false; stopBtn.disabled=true; }
+      function setCount() { count = +initInput.value; updateDisplay(); }
 
-      // Drag behavior
-      node.addEventListener('mousedown', e => {
-        dragEl = node;
-        offsetX = e.clientX - node.offsetLeft;
-        offsetY = e.clientY - node.offsetTop;
-        node.style.cursor = 'grabbing';
-      });
+      node.addEventListener('mousedown', e => { dragEl=node; offsetX=e.clientX-node.offsetLeft; offsetY=e.clientY-node.offsetTop; node.style.cursor='grabbing'; });
 
       startBtn.addEventListener('click', startOdo);
       stopBtn.addEventListener('click', stopOdo);
       setBtn.addEventListener('click', setCount);
-      colorPicker.addEventListener('input', () => odo.style.color = colorPicker.value);
+      colorPicker.addEventListener('input', ()=> odo.style.color=colorPicker.value);
 
-      updateDisplay();
-      countersContainer.appendChild(clone);
+      updateDisplay(); countersContainer.appendChild(clone);
     }
 
     addBtn.addEventListener('click', createCounter);
