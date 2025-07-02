@@ -53,107 +53,121 @@
   </template>
 
   <script>
-    const countersContainer = document.getElementById('counters');
-    const addBtn = document.getElementById('addCounterBtn');
-    let counterId = 0;
-    let dragEl = null, offsetX = 0, offsetY = 0;
+    document.addEventListener('DOMContentLoaded', () => {
+      const countersContainer = document.getElementById('counters');
+      const addBtn = document.getElementById('addCounterBtn');
+      const template = document.getElementById('counterTemplate');
+      let counterId = 0;
+      let dragEl = null, offsetX = 0, offsetY = 0;
 
-    document.addEventListener('mousemove', e => {
-      if (dragEl) {
-        dragEl.style.left = (e.clientX - offsetX) + 'px';
-        dragEl.style.top = (e.clientY - offsetY) + 'px';
+      document.addEventListener('mousemove', e => {
+        if (dragEl) {
+          dragEl.style.left = (e.clientX - offsetX) + 'px';
+          dragEl.style.top = (e.clientY - offsetY) + 'px';
+        }
+      });
+      document.addEventListener('mouseup', () => {
+        if (dragEl) { dragEl.style.cursor = 'move'; dragEl = null; }
+      });
+
+      function createCounter() {
+        const clone = template.content.cloneNode(true);
+        const node = clone.querySelector('.counter');
+        const id = counterId++;
+        node.dataset.id = id;
+        node.style.top = (20 + id * 140) + 'px';
+        node.style.left = '20px';
+
+        // Image upload
+        const imgInput = node.querySelector('.imgInput');
+        const counterImg = node.querySelector('.counterImg');
+        imgInput.addEventListener('change', e => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => counterImg.src = reader.result;
+          reader.readAsDataURL(file);
+        });
+
+        // Elements
+        const odo = node.querySelector('.odometer');
+        const initInput = node.querySelector('.initCount');
+        const minGainInput = node.querySelector('.minGain');
+        const maxGainInput = node.querySelector('.maxGain');
+        const intervalInput = node.querySelector('.interval');
+        const colorPicker = node.querySelector('.colorPicker');
+        const startBtn = node.querySelector('.startBtn');
+        const stopBtn = node.querySelector('.stopBtn');
+        const setBtn = node.querySelector('.setBtn');
+        const ctx = node.querySelector('.chart').getContext('2d');
+
+        let count = +initInput.value;
+        let timer = null;
+        let chart = new Chart(ctx, {
+          type: 'line',
+          data: { labels: [], datasets: [{ label: 'Count', data: [], fill: false, tension: 0.4 }] },
+          options: { animation: false, scales:{ x:{ display:false } }, plugins:{ legend:{ display:false } } }
+        });
+
+        function animateValue(start, end, duration=500) {
+          const range = end - start;
+          let startTime = null;
+          function step(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const progress = Math.min((timestamp - startTime)/duration, 1);
+            const value = Math.floor(start + (range * progress));
+            odo.textContent = value.toLocaleString();
+            if (progress < 1) requestAnimationFrame(step);
+          }
+          requestAnimationFrame(step);
+        }
+
+        function updateDisplay() {
+          const prev = +odo.textContent.replace(/,/g, '') || count;
+          animateValue(prev, count);
+          odo.style.color = colorPicker.value;
+          chart.data.labels.push('');
+          chart.data.datasets[0].data.push(count);
+          if (chart.data.labels.length > 20) {
+            chart.data.labels.shift(); chart.data.datasets[0].data.shift();
+          }
+          chart.update();
+        }
+
+        function startOdo() {
+          if (timer) return;
+          timer = setInterval(() => {
+            const min = +minGainInput.value;
+            const max = +maxGainInput.value;
+            count += Math.floor(Math.random()*(max-min+1)) + min;
+            updateDisplay();
+          }, +intervalInput.value);
+          startBtn.disabled = true; stopBtn.disabled = false;
+        }
+        function stopOdo() { clearInterval(timer); timer=null; startBtn.disabled=false; stopBtn.disabled=true; }
+        function setCount() { count = +initInput.value; updateDisplay(); }
+
+        // Drag start
+        node.addEventListener('mousedown', e => {
+          dragEl = node;
+          offsetX = e.clientX - node.offsetLeft;
+          offsetY = e.clientY - node.offsetTop;
+          node.style.cursor = 'grabbing';
+        });
+
+        startBtn.addEventListener('click', startOdo);
+        stopBtn.addEventListener('click', stopOdo);
+        setBtn.addEventListener('click', setCount);
+        colorPicker.addEventListener('input', () => odo.style.color = colorPicker.value);
+
+        // Append just the counter node
+        countersContainer.appendChild(node);
+        updateDisplay();
       }
+
+      addBtn.addEventListener('click', createCounter);
+      createCounter();
     });
-    document.addEventListener('mouseup', () => { if (dragEl) { dragEl.style.cursor = 'move'; dragEl = null; }});
-
-    function createCounter() {
-      const clone = document.getElementById('counterTemplate').content.cloneNode(true);
-      const node = clone.querySelector('.counter');
-      const id = counterId++;
-      node.dataset.id = id;
-      node.style.top = (20 + id * 140) + 'px';
-      node.style.left = '20px';
-
-      const imgInput = node.querySelector('.imgInput');
-      const counterImg = node.querySelector('.counterImg');
-      imgInput.addEventListener('change', e => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => counterImg.src = reader.result;
-        reader.readAsDataURL(file);
-      });
-
-      const odo = node.querySelector('.odometer');
-      const initInput = node.querySelector('.initCount');
-      const minGainInput = node.querySelector('.minGain');
-      const maxGainInput = node.querySelector('.maxGain');
-      const intervalInput = node.querySelector('.interval');
-      const colorPicker = node.querySelector('.colorPicker');
-      const startBtn = node.querySelector('.startBtn');
-      const stopBtn = node.querySelector('.stopBtn');
-      const setBtn = node.querySelector('.setBtn');
-      const ctx = node.querySelector('.chart').getContext('2d');
-
-      let count = +initInput.value;
-      let timer = null;
-      let prevCount = count;
-      let chart = new Chart(ctx, {
-        type: 'line', data: { labels: [], datasets: [{ label: 'Count', data: [], fill: false, tension: 0.4 }] },
-        options: { animation: false, scales:{ x:{ display:false } }, plugins:{ legend:{ display:false } } }
-      });
-
-      function animateValue(start, end, duration=500) {
-        const range = end - start;
-        let startTime = null;
-        function step(timestamp) {
-          if (!startTime) startTime = timestamp;
-          const progress = Math.min((timestamp - startTime)/duration, 1);
-          const value = Math.floor(start + (range * progress));
-          odo.textContent = value.toLocaleString();
-          if (progress < 1) requestAnimationFrame(step);
-        }
-        requestAnimationFrame(step);
-      }
-
-      function updateDisplay() {
-        prevCount = +odo.textContent.replace(/,/g, '') || 0;
-        animateValue(prevCount, count);
-        odo.style.color = colorPicker.value;
-        chart.data.labels.push('');
-        chart.data.datasets[0].data.push(count);
-        if (chart.data.labels.length > 20) {
-          chart.data.labels.shift(); chart.data.datasets[0].data.shift();
-        }
-        chart.update();
-      }
-
-      function startOdo() {
-        if (timer) return;
-        timer = setInterval(() => {
-          const min = +minGainInput.value;
-          const max = +maxGainInput.value;
-          prevCount = count;
-          count += Math.floor(Math.random()*(max-min+1)) + min;
-          updateDisplay();
-        }, +intervalInput.value);
-        startBtn.disabled = true; stopBtn.disabled = false;
-      }
-      function stopOdo() { clearInterval(timer); timer=null; startBtn.disabled=false; stopBtn.disabled=true; }
-      function setCount() { count = +initInput.value; updateDisplay(); }
-
-      node.addEventListener('mousedown', e => { dragEl=node; offsetX=e.clientX-node.offsetLeft; offsetY=e.clientY-node.offsetTop; node.style.cursor='grabbing'; });
-
-      startBtn.addEventListener('click', startOdo);
-      stopBtn.addEventListener('click', stopOdo);
-      setBtn.addEventListener('click', setCount);
-      colorPicker.addEventListener('input', ()=> odo.style.color=colorPicker.value);
-
-      updateDisplay(); countersContainer.appendChild(clone);
-    }
-
-    addBtn.addEventListener('click', createCounter);
-    createCounter();
   </script>
 </body>
 </html>
